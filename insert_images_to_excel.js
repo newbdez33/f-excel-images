@@ -91,8 +91,8 @@ function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, re
         } else {
           $newH = $cellH; $newW = $imgW * $scaleH
         }
-        $left = $cellLeft + (($cellW - $newW) / 2.0)
-        $top = $cellTop + (($cellH - $newH) / 2.0)
+        $left = $cellLeft
+        $top = $cellTop
         $shapesBefore = $ws.Shapes.Count
         $shape = $ws.Shapes.AddPicture($f.FullName, $false, $true, [double]$left, [double]$top, [double]$newW, [double]$newH)
         try { $shape.LockAspectRatio = $true } catch {}
