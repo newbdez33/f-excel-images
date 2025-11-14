@@ -1,0 +1,16 @@
+{
+  "name": "excel_fuck_image",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "insert": "node insert_images_to_excel.js",
+    "extract": "node extract_images_from_excel.js",
+    "delete-shapes": "node delete_shapes_in_excel.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
