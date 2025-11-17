@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
 const { spawnSync } = require('child_process')
 
 function parseArgs(argv) {
@@ -51,13 +52,20 @@ function getImages(dir) {
   }
   walk(dir)
   return out.sort((a, b) => {
+    const ta = (path.relative(dir, path.dirname(a)).split(/[\\/]/)[0] || '').toLowerCase()
+    const tb = (path.relative(dir, path.dirname(b)).split(/[\\/]/)[0] || '').toLowerCase()
+    if (ta !== tb) return ta.localeCompare(tb, undefined, { numeric: true, sensitivity: 'base' })
     const na = numKey(a), nb = numKey(b)
     if (na !== nb) return na - nb
-    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+    const ba = path.basename(a), bb = path.basename(b)
+    return ba.localeCompare(bb, undefined, { numeric: true, sensitivity: 'base' })
   })
 }
 
-function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, recordCol }) {
+function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, recordCol, files }) {
+  const list = files && files.length ? files : getImages(imageDir)
+  const tmpList = path.join(os.tmpdir(), `excel_fuck_image_list_${Date.now()}.txt`)
+  fs.writeFileSync(tmpList, list.join('\n'), 'utf8')
   const ps = `
   $ErrorActionPreference = 'Stop'
   $excelPath = '${excelPath.replace(/'/g, "''")}'
@@ -81,14 +89,8 @@ function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, re
     $deletedShapes = 0
     foreach ($s in $ws.Shapes) { try { if ($s.TopLeftCell.Row -ge 4) { $s.Delete(); $deletedShapes++ } } catch {} }
     Write-Output ("Cleared shapes rows>=4: {0}" -f $deletedShapes)
-    $files = Get-ChildItem -Path $imageDir -File -Recurse |
-      Where-Object { $ext = $_.Extension.ToLower(); $ext -in @('.png','.jpg','.jpeg','.bmp','.gif','.tif','.tiff') } |
-      Sort-Object @{ Expression = {
-        $bn = $_.BaseName
-        if ($bn -match '^[0-9]+$') { [int]$bn }
-        elseif ($bn -match '[0-9]+') { [int]([regex]::Match($bn, '[0-9]+').Value) }
-        else { [int]::MaxValue }
-      } }, @{ Expression = { $_.FullName } }
+    $listPath = '${tmpList.replace(/'/g, "''")}'
+    $files = Get-Content -LiteralPath $listPath -Encoding UTF8
     Add-Type -AssemblyName System.Drawing
     $countTotal = 0; $countOk = 0; $countFail = 0
     foreach ($f in $files) {
@@ -116,7 +118,7 @@ function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, re
             }
           }
         }
-        $img = [System.Drawing.Image]::FromFile($f.FullName)
+        $img = [System.Drawing.Image]::FromFile($f)
         $imgW = [double]$img.Width; $imgH = [double]$img.Height
         $img.Dispose()
         if ($imgW -le 0 -or $imgH -le 0) { throw "Image has zero dimension" }
@@ -133,21 +135,21 @@ function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, re
         $left = $cellLeft
         $top = $cellTop
         $shapesBefore = $ws.Shapes.Count
-        $shape = $ws.Shapes.AddPicture($f.FullName, $false, $true, [double]$left, [double]$top, [double]$newW, [double]$newH)
+        $shape = $ws.Shapes.AddPicture($f, $false, $true, [double]$left, [double]$top, [double]$newW, [double]$newH)
         try { $shape.LockAspectRatio = $true } catch {}
         try { $shape.Placement = 2 } catch {}
-        if ($recordCol -gt 0) { $ws.Cells.Item($destRow, $recordCol).Value2 = $f.Name }
+        if ($recordCol -gt 0) { $ws.Cells.Item($destRow, $recordCol).Value2 = [System.IO.Path]::GetFileName($f) }
         $shapesAfter = $ws.Shapes.Count
         if ($shape -ne $null -and $shapesAfter -gt $shapesBefore) {
-          Write-Output "[OK] $($f.Name) -> Row $destRow, Col $imageCol"
+          Write-Output "[OK] $($f) -> Row $destRow, Col $imageCol"
           $countOk++
         } else {
-          Write-Output "[FAIL] $($f.Name) -> Shape not added"
+          Write-Output "[FAIL] $($f) -> Shape not added"
           $countFail++
         }
         $lastRow = $destRow
       } catch {
-        Write-Output "[FAIL] $($f.Name) -> $($_.Exception.Message)"
+        Write-Output "[FAIL] $($f) -> $($_.Exception.Message)"
         $countFail++
       }
       $countTotal++
@@ -161,6 +163,7 @@ function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, re
   `
   const encoded = Buffer.from(ps, 'utf16le').toString('base64')
   const r = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { stdio: 'inherit' })
+  try { fs.unlinkSync(tmpList) } catch {}
   if (r.error) throw r.error
   if (r.status !== 0) throw new Error('PowerShell exited with code ' + r.status)
 }
@@ -207,7 +210,7 @@ function main() {
   }
   const backupPath = createBackup(excelPath)
   console.log('已备份: ' + backupPath)
-  runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, recordCol })
+  runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, recordCol, files: imgs })
   console.log('完成')
 }
 
