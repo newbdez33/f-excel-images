@@ -96,7 +96,7 @@ function runExcelCOMDelete({ excelPath, sheetName }) {
 
 function main() {
   const args = parseArgs(process.argv)
-  const excelPath = args.excel || 'C\\Users\\jacky\\Downloads\\BRA_006-03_農業経営統計調査（自社内）_テストエビデンス_20251017.xls'
+  const excelPath = args.excel || 'X\\Users\\jacky\\Downloads\\BRA_006-03_農業経営統計調査（自社内）_テストエビデンス_20251017.xls'
   const sheetName = args.sheet
   const dryRun = !!args.dryRun
 
