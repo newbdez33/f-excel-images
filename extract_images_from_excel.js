@@ -144,7 +144,7 @@ function runExcelCOMExtract({ excelPath, sheetName, outDir }) {
         foreach ($rec in $ordered) {
           try {
             $sheetIdx++
-            $file = Join-Path $sheetOut ("$($sheetSafe)_$sheetIdx.png")
+            $file = Join-Path $sheetOut ("$sheetIdx.png")
             $done = ExportShapeImage $ws $rec.S $file
             if ($done) {
               $exists = Test-Path -Path $file -PathType Leaf
