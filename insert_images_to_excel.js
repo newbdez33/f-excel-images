@@ -43,8 +43,18 @@ function getImages(dir) {
       }
     }
   }
+  function numKey(p) {
+    const bn = path.basename(p, path.extname(p))
+    if (/^\d+$/.test(bn)) return parseInt(bn, 10)
+    const m = bn.match(/\d+/)
+    return m ? parseInt(m[0], 10) : Number.POSITIVE_INFINITY
+  }
   walk(dir)
-  return out.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }))
+  return out.sort((a, b) => {
+    const na = numKey(a), nb = numKey(b)
+    if (na !== nb) return na - nb
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+  })
 }
 
 function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, recordCol }) {
@@ -71,7 +81,14 @@ function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, re
     $deletedShapes = 0
     foreach ($s in $ws.Shapes) { try { if ($s.TopLeftCell.Row -ge 4) { $s.Delete(); $deletedShapes++ } } catch {} }
     Write-Output ("Cleared shapes rows>=4: {0}" -f $deletedShapes)
-    $files = Get-ChildItem -Path $imageDir -File -Recurse | Where-Object { $ext = $_.Extension.ToLower(); $ext -in @('.png','.jpg','.jpeg','.bmp','.gif','.tif','.tiff') } | Sort-Object FullName
+    $files = Get-ChildItem -Path $imageDir -File -Recurse |
+      Where-Object { $ext = $_.Extension.ToLower(); $ext -in @('.png','.jpg','.jpeg','.bmp','.gif','.tif','.tiff') } |
+      Sort-Object @{ Expression = {
+        $bn = $_.BaseName
+        if ($bn -match '^[0-9]+$') { [int]$bn }
+        elseif ($bn -match '[0-9]+') { [int]([regex]::Match($bn, '[0-9]+').Value) }
+        else { [int]::MaxValue }
+      } }, @{ Expression = { $_.FullName } }
     Add-Type -AssemblyName System.Drawing
     $countTotal = 0; $countOk = 0; $countFail = 0
     foreach ($f in $files) {
