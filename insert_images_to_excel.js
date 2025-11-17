@@ -103,11 +103,15 @@ function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, re
         $imgW = [double]$img.Width; $imgH = [double]$img.Height
         $img.Dispose()
         if ($imgW -le 0 -or $imgH -le 0) { throw "Image has zero dimension" }
-        $scaleW = $cellW / $imgW; $scaleH = $cellH / $imgH
-        if ($scaleW -lt $scaleH) {
-          $newW = $cellW; $newH = $imgH * $scaleW
+        if (($imgW -lt $cellW) -and ($imgH -lt $cellH)) {
+          $newW = $imgW; $newH = $imgH
         } else {
-          $newH = $cellH; $newW = $imgW * $scaleH
+          $scaleW = $cellW / $imgW; $scaleH = $cellH / $imgH
+          if ($scaleW -lt $scaleH) {
+            $newW = $cellW; $newH = $imgH * $scaleW
+          } else {
+            $newH = $cellH; $newW = $imgW * $scaleH
+          }
         }
         $left = $cellLeft
         $top = $cellTop
