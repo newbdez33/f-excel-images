@@ -118,43 +118,61 @@ function runExcelCOMExtract({ excelPath, sheetName, outDir }) {
         $sheetSafe = ($ws.Name -replace '[\\/:*?"<>|]','_')
         $sheetOut = Join-Path $outDir $sheetSafe
         New-Item -ItemType Directory -Path $sheetOut -Force | Out-Null
+        Write-Output ("[SHEET] Processing: {0}" -f $ws.Name)
+        try { $ws.Activate() } catch {}
+        try { $excel.ActiveWindow.ScrollRow = 1 } catch {}
+        try { $excel.ActiveWindow.ScrollColumn = 1 } catch {}
+        try { $ws.Cells.Item(1,1).Select() } catch {}
+        $okSheet = 0; $failSheet = 0
         $sheetIdx = 0
         foreach ($s in $ws.Shapes) {
           try {
             $t = [int]$s.Type
-            if ($t -eq 13 -or $t -eq 11) {
+            if ($t -eq 6) {
+              foreach ($gi in $s.GroupItems) {
+                try {
+                  $sheetIdx++
+                  $nameSafe = ($gi.Name -replace '[\\/:*?"<>|]','_')
+                  $file = Join-Path $sheetOut ("$($nameSafe)_$sheetIdx.png")
+              $done = ExportShapeImage $ws $gi $file
+                  if ($done) {
+                    $exists = Test-Path -Path $file -PathType Leaf
+                    if ($exists) {
+                      try { $fi = Get-Item -LiteralPath $file; $sizeB = [int]$fi.Length } catch { $sizeB = -1 }
+                      Write-Output ("[OK] {0}:{1} -> {2} (verified {3} bytes)" -f $ws.Name, $gi.Name, $file, $sizeB)
+                      $ok++; $okSheet++
+                    } else {
+                      Write-Output ("[WARN] Verified missing: {0}:{1} -> {2}" -f $ws.Name, $gi.Name, $file)
+                      $fail++; $failSheet++
+                    }
+                  } else {
+                    throw "Export failed"
+                  }
+                } catch { $fail++; $failSheet++; Write-Output ("[FAIL] {0}:{1} -> {2}" -f $ws.Name, $gi.Name, $_.Exception.Message) }
+              }
+            } else {
               $sheetIdx++
               $nameSafe = ($s.Name -replace '[\\/:*?"<>|]','_')
               $file = Join-Path $sheetOut ("$($nameSafe)_$sheetIdx.png")
               $done = ExportShapeImage $ws $s $file
               if ($done) {
-                Write-Output ("[OK] {0}:{1} -> {2}" -f $ws.Name, $s.Name, $file)
-                $ok++
+                $exists = Test-Path -Path $file -PathType Leaf
+                if ($exists) {
+                  try { $fi = Get-Item -LiteralPath $file; $sizeB = [int]$fi.Length } catch { $sizeB = -1 }
+                  Write-Output ("[OK] {0}:{1} -> {2} (verified {3} bytes)" -f $ws.Name, $s.Name, $file, $sizeB)
+                  $ok++; $okSheet++
+                } else {
+                  Write-Output ("[WARN] Verified missing: {0}:{1} -> {2}" -f $ws.Name, $s.Name, $file)
+                  $fail++; $failSheet++
+                }
               } else {
                 throw "Export failed"
               }
-            } elseif ($t -eq 6) {
-              foreach ($gi in $s.GroupItems) {
-                try {
-                  $gt = [int]$gi.Type
-                  if ($gt -eq 13 -or $gt -eq 11) {
-                    $sheetIdx++
-                    $nameSafe = ($gi.Name -replace '[\\/:*?"<>|]','_')
-                    $file = Join-Path $sheetOut ("$($nameSafe)_$sheetIdx.png")
-                    $done = ExportShapeImage $ws $gi $file
-                    if ($done) {
-                      Write-Output ("[OK] {0}:{1} -> {2}" -f $ws.Name, $gi.Name, $file)
-                      $ok++
-                    } else {
-                      throw "Export failed"
-                    }
-                  }
-                } catch { $fail++; Write-Output ("[FAIL] {0}:{1} -> {2}" -f $ws.Name, $gi.Name, $_.Exception.Message) }
-              }
             }
-          } catch { $fail++; Write-Output ("[FAIL] {0}:{1} -> {2}" -f $ws.Name, $s.Name, $_.Exception.Message) }
+          } catch { $fail++; $failSheet++; Write-Output ("[FAIL] {0}:{1} -> {2}" -f $ws.Name, $s.Name, $_.Exception.Message) }
         }
-      } catch { $fail++; Write-Output ("[FAIL_SHEET] {0} -> {1}" -f $ws.Name, $_.Exception.Message) }
+        Write-Output ("[SHEET] Summary: {0} ok={1}, fail={2}" -f $ws.Name, $okSheet, $failSheet)
+      } catch { $fail++; $failSheet++; Write-Output ("[FAIL_SHEET] {0} -> {1}" -f $ws.Name, $_.Exception.Message) }
     }
     Write-Output ("Summary: exported={0}, failed={1}" -f $ok, $fail)
   } finally {
