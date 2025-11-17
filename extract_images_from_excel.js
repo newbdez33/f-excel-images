@@ -125,51 +125,41 @@ function runExcelCOMExtract({ excelPath, sheetName, outDir }) {
         try { $ws.Cells.Item(1,1).Select() } catch {}
         $okSheet = 0; $failSheet = 0
         $sheetIdx = 0
+        $shapeRecords = @()
         foreach ($s in $ws.Shapes) {
           try {
             $t = [int]$s.Type
             if ($t -eq 6) {
               foreach ($gi in $s.GroupItems) {
                 try {
-                  $sheetIdx++
-                  $nameSafe = ($gi.Name -replace '[\\/:*?"<>|]','_')
-                  $file = Join-Path $sheetOut ("$($nameSafe)_$sheetIdx.png")
-              $done = ExportShapeImage $ws $gi $file
-                  if ($done) {
-                    $exists = Test-Path -Path $file -PathType Leaf
-                    if ($exists) {
-                      try { $fi = Get-Item -LiteralPath $file; $sizeB = [int]$fi.Length } catch { $sizeB = -1 }
-                      Write-Output ("[OK] {0}:{1} -> {2} (verified {3} bytes)" -f $ws.Name, $gi.Name, $file, $sizeB)
-                      $ok++; $okSheet++
-                    } else {
-                      Write-Output ("[WARN] Verified missing: {0}:{1} -> {2}" -f $ws.Name, $gi.Name, $file)
-                      $fail++; $failSheet++
-                    }
-                  } else {
-                    throw "Export failed"
-                  }
-                } catch { $fail++; $failSheet++; Write-Output ("[FAIL] {0}:{1} -> {2}" -f $ws.Name, $gi.Name, $_.Exception.Message) }
+                  $shapeRecords += [PSCustomObject]@{ S = $gi; Name = $gi.Name; Top = [double]$gi.Top; Left = [double]$gi.Left }
+                } catch {}
               }
             } else {
-              $sheetIdx++
-              $nameSafe = ($s.Name -replace '[\\/:*?"<>|]','_')
-              $file = Join-Path $sheetOut ("$($nameSafe)_$sheetIdx.png")
-              $done = ExportShapeImage $ws $s $file
-              if ($done) {
-                $exists = Test-Path -Path $file -PathType Leaf
-                if ($exists) {
-                  try { $fi = Get-Item -LiteralPath $file; $sizeB = [int]$fi.Length } catch { $sizeB = -1 }
-                  Write-Output ("[OK] {0}:{1} -> {2} (verified {3} bytes)" -f $ws.Name, $s.Name, $file, $sizeB)
-                  $ok++; $okSheet++
-                } else {
-                  Write-Output ("[WARN] Verified missing: {0}:{1} -> {2}" -f $ws.Name, $s.Name, $file)
-                  $fail++; $failSheet++
-                }
-              } else {
-                throw "Export failed"
-              }
+              $shapeRecords += [PSCustomObject]@{ S = $s; Name = $s.Name; Top = [double]$s.Top; Left = [double]$s.Left }
             }
-          } catch { $fail++; $failSheet++; Write-Output ("[FAIL] {0}:{1} -> {2}" -f $ws.Name, $s.Name, $_.Exception.Message) }
+          } catch {}
+        }
+        $ordered = $shapeRecords | Sort-Object -Property Top, Left, Name
+        foreach ($rec in $ordered) {
+          try {
+            $sheetIdx++
+            $file = Join-Path $sheetOut ("$sheetIdx.png")
+            $done = ExportShapeImage $ws $rec.S $file
+            if ($done) {
+              $exists = Test-Path -Path $file -PathType Leaf
+              if ($exists) {
+                try { $fi = Get-Item -LiteralPath $file; $sizeB = [int]$fi.Length } catch { $sizeB = -1 }
+                Write-Output ("[OK] {0}:{1} -> {2} (verified {3} bytes)" -f $ws.Name, $rec.Name, $file, $sizeB)
+                $ok++; $okSheet++
+              } else {
+                Write-Output ("[WARN] Verified missing: {0}:{1} -> {2}" -f $ws.Name, $rec.Name, $file)
+                $fail++; $failSheet++
+              }
+            } else {
+              throw "Export failed"
+            }
+          } catch { $fail++; $failSheet++; Write-Output ("[FAIL] {0}:{1} -> {2}" -f $ws.Name, $rec.Name, $_.Exception.Message) }
         }
         Write-Output ("[SHEET] Summary: {0} ok={1}, fail={2}" -f $ws.Name, $okSheet, $failSheet)
       } catch { $fail++; $failSheet++; Write-Output ("[FAIL_SHEET] {0} -> {1}" -f $ws.Name, $_.Exception.Message) }
