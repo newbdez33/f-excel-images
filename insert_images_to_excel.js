@@ -67,6 +67,7 @@ function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, re
     $usedLast = $ws.Cells.Item($ws.Rows.Count, 1).End(-4162).Row
     if ($usedLast -ge 4) { $ws.Rows.Item("4:$usedLast").Delete(); Write-Output ("Cleared rows 4:{0}" -f $usedLast) }
     $lastRow = $ws.Cells.Item($ws.Rows.Count, 1).End(-4162).Row
+    $firstDestRow = $lastRow + 1
     $deletedShapes = 0
     foreach ($s in $ws.Shapes) { try { if ($s.TopLeftCell.Row -ge 4) { $s.Delete(); $deletedShapes++ } } catch {} }
     Write-Output ("Cleared shapes rows>=4: {0}" -f $deletedShapes)
@@ -81,6 +82,23 @@ function runExcelCOM({ excelPath, sheetName, imageDir, templateRow, imageCol, re
         if ($cell.MergeCells) { try { $cell.MergeArea.UnMerge() } catch {} ; $cell = $ws.Cells.Item($destRow, $imageCol) }
         $cellLeft = [double]$cell.Left; $cellTop = [double]$cell.Top; $cellW = [double]$cell.Width; $cellH = [double]$cell.Height
         if ($cellW -le 0 -or $cellH -le 0) { throw "Target cell has zero size" }
+        $noCol = [int]($imageCol - 1)
+        if ($noCol -ge 1) {
+          $noCell = $ws.Cells.Item($destRow, $noCol)
+          if ($destRow -ne $firstDestRow) {
+            $prevVal = $null
+            try { $prevVal = $ws.Cells.Item($destRow - 1, $noCol).Value2 } catch {}
+            if ($prevVal -ne $null -and $prevVal -ne '') {
+              try { $noCell.Value2 = [double]$prevVal + 1 } catch { $noCell.Value2 = $prevVal }
+            } else {
+              $tmplVal = $null
+              try { $tmplVal = $ws.Cells.Item($templateRow, $noCol).Value2 } catch {}
+              if ($tmplVal -ne $null -and $tmplVal -ne '') {
+                try { $noCell.Value2 = [double]$tmplVal + 1 } catch { $noCell.Value2 = $tmplVal }
+              }
+            }
+          }
+        }
         $img = [System.Drawing.Image]::FromFile($f.FullName)
         $imgW = [double]$img.Width; $imgH = [double]$img.Height
         $img.Dispose()
