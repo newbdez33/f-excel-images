@@ -48,7 +48,7 @@ function runExcelCOMExtract({ excelPath, sheetName, outDir }) {
       $w = [int]$img.Width; $h = [int]$img.Height
       $img.Dispose()
       if ($w -gt 0 -and $h -gt 0) { return $true }
-    } catch { $ok = $false }
+    } catch { $ok = $false; Write-Output ("[INFO] Export method failed: {0}:{1} -> {2}" -f $ws.Name, $shape.Name, $_.Exception.Message) }
     try { Remove-Item -Path $file -ErrorAction SilentlyContinue } catch {}
     foreach ($app in @(-4154, 1)) { # xlPrinter, xlScreen
       foreach ($fmt in @(-4147, 2)) { # xlPicture, xlBitmap
@@ -57,7 +57,7 @@ function runExcelCOMExtract({ excelPath, sheetName, outDir }) {
           $shape.CopyPicture($app, $fmt)
           Start-Sleep -Milliseconds 50
           $before = $ws.Shapes.Count
-          try { $ws.Activate() } catch {}
+          try { $ws.Activate() } catch { Write-Output ("[INFO] Activate failed: {0} -> {1}" -f $ws.Name, $_.Exception.Message) }
           $ws.Paste() | Out-Null
           $after = $ws.Shapes.Count
           if ($after -gt $before) {
@@ -68,11 +68,11 @@ function runExcelCOMExtract({ excelPath, sheetName, outDir }) {
               $w = [int]$img.Width; $h = [int]$img.Height
               $img.Dispose()
               if ($w -gt 0 -and $h -gt 0) { try { $tmp.Delete() } catch {}; try { $excel.CutCopyMode = $false } catch {}; return $true }
-            } catch {}
+            } catch { Write-Output ("[INFO] Temp export failed: {0}:{1} -> {2}" -f $ws.Name, $tmp.Name, $_.Exception.Message) }
             try { $tmp.Delete() } catch {}
           }
           try { $excel.CutCopyMode = $false } catch {}
-        } catch { $ok = $false }
+        } catch { $ok = $false; Write-Output ("[INFO] CopyPicture/Paste failed: {0}:{1} -> {2}" -f $ws.Name, $shape.Name, $_.Exception.Message) }
       }
     }
     foreach ($app in @(-4154, 1)) {
@@ -94,7 +94,7 @@ function runExcelCOMExtract({ excelPath, sheetName, outDir }) {
           try { $ch.Delete() } catch {}
           try { $excel.CutCopyMode = $false } catch {}
           if ($w -gt 0 -and $h -gt 0) { return $true }
-        } catch {}
+        } catch { Write-Output ("[INFO] Chart export failed: {0}:{1} -> {2}" -f $ws.Name, $shape.Name, $_.Exception.Message) }
       }
     }
     return $false
@@ -112,6 +112,9 @@ function runExcelCOMExtract({ excelPath, sheetName, outDir }) {
     $ok = 0; $fail = 0
     foreach ($ws in $targets) {
       try {
+        if ($ws.ProtectContents -or $ws.ProtectDrawingObjects) {
+          try { $ws.Unprotect() | Out-Null; Write-Output ("[INFO] Unprotected sheet: {0}" -f $ws.Name) } catch { Write-Output ("[INFO] Unprotect failed: {0} -> {1}" -f $ws.Name, $_.Exception.Message) }
+        }
         $sheetSafe = ($ws.Name -replace '[\\/:*?"<>|]','_')
         $sheetOut = Join-Path $outDir $sheetSafe
         New-Item -ItemType Directory -Path $sheetOut -Force | Out-Null
@@ -146,12 +149,12 @@ function runExcelCOMExtract({ excelPath, sheetName, outDir }) {
                       throw "Export failed"
                     }
                   }
-                } catch { $fail++; Write-Output ("[FAIL] {0}:{1}" -f $ws.Name, $gi.Name) }
+                } catch { $fail++; Write-Output ("[FAIL] {0}:{1} -> {2}" -f $ws.Name, $gi.Name, $_.Exception.Message) }
               }
             }
-          } catch { $fail++; Write-Output ("[FAIL] {0}:{1}" -f $ws.Name, $s.Name) }
+          } catch { $fail++; Write-Output ("[FAIL] {0}:{1} -> {2}" -f $ws.Name, $s.Name, $_.Exception.Message) }
         }
-      } catch { $fail++ }
+      } catch { $fail++; Write-Output ("[FAIL_SHEET] {0} -> {1}" -f $ws.Name, $_.Exception.Message) }
     }
     Write-Output ("Summary: exported={0}, failed={1}" -f $ok, $fail)
   } finally {
